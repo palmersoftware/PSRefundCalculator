@@ -152,6 +152,11 @@ $grid.ColumnHeadersHeightSizeMode = 'EnableResizing'
 $grid.ColumnHeadersHeight = 30
 $grid.RowsDefaultCellStyle.Font = $grid.Font
 
+# Enable double buffering for smoother scrolling
+$gridType = $grid.GetType()
+$doubleBufferedProp = $gridType.GetProperty("DoubleBuffered", [System.Reflection.BindingFlags] "Instance, NonPublic")
+$doubleBufferedProp.SetValue($grid, $true, $null)
+
 # Layout: manually position controls
 $form.Controls.AddRange(@($topPanel, $grid))
 
