@@ -1,4 +1,19 @@
-﻿# =========================================
+﻿# -------------------------------
+# Helper to safely parse cleaned currency strings to decimal
+# -------------------------------
+function SafeDecimal($val) {
+    $clean = CleanCurrency $val
+    if ([string]::IsNullOrWhiteSpace($clean)) { return 0 }
+    [decimal]::Parse($clean)
+}
+# -------------------------------
+# Helper to clean currency strings
+# -------------------------------
+function CleanCurrency($val) {
+    if ($null -eq $val) { return "0" }
+    return ($val -replace '[^0-9.-]', '')
+}
+# =========================================
 # NWE Shipping Calculator - PowerShell GUI
 # =========================================
 # This application:
@@ -84,14 +99,15 @@ function Update-Refunds($dt) {
     # Move Total Shipping Paid column immediately after Shipping Paid
     $dt.Columns[$colTotalShippingPaid].SetOrdinal($dt.Columns[$colShippingPaid].Ordinal + 1)
 
+
     # Group rows by recipient
     foreach ($group in ($dt | Group-Object $colRecipient)) {
         $totalPaid = 0; $totalCost = 0
 
         # Sum Shipping Paid and Shipping Cost for this recipient
         foreach ($r in $group.Group) {
-            $paid=0; [decimal]::TryParse($r.$colShippingPaid,[ref]$paid)|Out-Null; $totalPaid += $paid
-            $cost=0; [decimal]::TryParse($r.$colShippingCost,[ref]$cost)|Out-Null; $totalCost += $cost
+            $paid=0; [decimal]::TryParse((CleanCurrency $r.$colShippingPaid),[ref]$paid)|Out-Null; $totalPaid += $paid
+            $cost=0; [decimal]::TryParse((CleanCurrency $r.$colShippingCost),[ref]$cost)|Out-Null; $totalCost += $cost
         }
 
         $first=$true
@@ -205,16 +221,18 @@ $grid.add_CellFormatting({
 
     # Red highlight for missing Shipping Paid
     if ($colName -eq $colShippingPaid) {
-        $val=$row.Cells[$e.ColumnIndex].Value
-        if ([string]::IsNullOrWhiteSpace($val) -or -not [decimal]::TryParse($val,[ref]0) -or ([decimal]$val -eq 0)) {
+        $val=CleanCurrency $row.Cells[$e.ColumnIndex].Value
+        $num=0; $parsed=[decimal]::TryParse($val,[ref]$num)
+        if ([string]::IsNullOrWhiteSpace($val) -or -not $parsed -or ($num -eq 0)) {
             $row.Cells[$e.ColumnIndex].Style.BackColor=[System.Drawing.Color]::Red
         }
     }
 
     # Red highlight for missing Shipping Cost (only first row per recipient)
     elseif ($colName -eq $colShippingCost -and $isFirst) {
-        $val=$row.Cells[$e.ColumnIndex].Value
-        if ([string]::IsNullOrWhiteSpace($val) -or -not [decimal]::TryParse($val,[ref]0)) {
+        $val=CleanCurrency $row.Cells[$e.ColumnIndex].Value
+        $num=0; $parsed=[decimal]::TryParse($val,[ref]$num)
+        if ([string]::IsNullOrWhiteSpace($val) -or -not $parsed) {
             $row.Cells[$e.ColumnIndex].Style.BackColor=[System.Drawing.Color]::Red
         }
     }
@@ -222,14 +240,17 @@ $grid.add_CellFormatting({
     # Refund Amount coloring & bold
     elseif ($colName -eq $colRefundAmount -and $isFirst) {
         $row.Cells[$e.ColumnIndex].Style.Font=$boldFont
-        $spVal=$row.Cells[$dt.Columns[$colShippingPaid].Ordinal].Value
-        $scVal=$row.Cells[$dt.Columns[$colShippingCost].Ordinal].Value
-        $refund=0; [decimal]::TryParse($row.Cells[$e.ColumnIndex].Value,[ref]$refund)|Out-Null
+        $spVal=CleanCurrency $row.Cells[$dt.Columns[$colShippingPaid].Ordinal].Value
+        $scVal=CleanCurrency $row.Cells[$dt.Columns[$colShippingCost].Ordinal].Value
+        $refundVal=CleanCurrency $row.Cells[$e.ColumnIndex].Value
+        $refund=0; $parsed=[decimal]::TryParse($refundVal,[ref]$refund)
         $hasRed=$false
-        if ([string]::IsNullOrWhiteSpace($spVal) -or -not [decimal]::TryParse($spVal,[ref]0) -or ([decimal]$spVal -eq 0)) { $hasRed=$true }
-        if ([string]::IsNullOrWhiteSpace($scVal) -or -not [decimal]::TryParse($scVal,[ref]0)) { $hasRed=$true }
+        $spNum=0; $spParsed=[decimal]::TryParse($spVal,[ref]$spNum)
+        $scNum=0; $scParsed=[decimal]::TryParse($scVal,[ref]$scNum)
+        if ([string]::IsNullOrWhiteSpace($spVal) -or -not $spParsed -or ($spNum -eq 0)) { $hasRed=$true }
+        if ([string]::IsNullOrWhiteSpace($scVal) -or -not $scParsed) { $hasRed=$true }
 
-        if ($refund -le 0) { $row.Cells[$e.ColumnIndex].Style.BackColor=[System.Drawing.Color]::Yellow }
+        if ($parsed -and $refund -le 0) { $row.Cells[$e.ColumnIndex].Style.BackColor=[System.Drawing.Color]::Yellow }
         elseif ($hasRed) { $row.Cells[$e.ColumnIndex].Style.BackColor=[System.Drawing.Color]::Red }
         else { $row.Cells[$e.ColumnIndex].Style.BackColor=[System.Drawing.Color]::Green }
     }
@@ -251,13 +272,14 @@ $btnLoad.Add_Click({
         Update-Refunds $dt
 
         # Add totals row at bottom
-        $totals = $dt.NewRow()
-        if ($dt.Columns.Contains($colOrder)) { $totals.$colOrder="TOTAL" }
-        $totals.$colShippingPaid=($dt|Measure-Object $colShippingPaid -Sum).Sum
-        $totals.$colTotalShippingPaid=($dt|Measure-Object $colTotalShippingPaid -Sum).Sum
-        $totals.$colShippingCost=($dt|Measure-Object $colShippingCost -Sum).Sum
-        $totals.$colRefundAmount=($dt|Measure-Object $colRefundAmount -Sum).Sum
-        $dt.Rows.Add($totals)
+    $totals = $dt.NewRow()
+    if ($dt.Columns.Contains($colOrder)) { $totals.$colOrder="TOTAL" }
+    # Use SafeDecimal for totals
+    $totals.$colShippingPaid=($dt|ForEach-Object{SafeDecimal $_.$colShippingPaid}|Measure-Object -Sum).Sum
+    $totals.$colTotalShippingPaid=($dt|ForEach-Object{SafeDecimal $_.$colTotalShippingPaid}|Measure-Object -Sum).Sum
+    $totals.$colShippingCost=($dt|ForEach-Object{SafeDecimal $_.$colShippingCost}|Measure-Object -Sum).Sum
+    $totals.$colRefundAmount=($dt|ForEach-Object{SafeDecimal $_.$colRefundAmount}|Measure-Object -Sum).Sum
+    $dt.Rows.Add($totals)
 
         $grid.DataSource=$dt; $grid.Refresh()
         $totRow=$grid.Rows.Count-1
@@ -282,14 +304,15 @@ $btnCalc.Add_Click({
 
         Update-Refunds $dt
 
-        # Add updated totals row
-        $totals = $dt.NewRow()
-        if ($dt.Columns.Contains($colOrder)) { $totals.$colOrder="TOTAL" }
-        $totals.$colShippingPaid=($dt|Measure-Object $colShippingPaid -Sum).Sum
-        $totals.$colTotalShippingPaid=($dt|Measure-Object $colTotalShippingPaid -Sum).Sum
-        $totals.$colShippingCost=($dt|Measure-Object $colShippingCost -Sum).Sum
-        $totals.$colRefundAmount=($dt|Measure-Object $colRefundAmount -Sum).Sum
-        $dt.Rows.Add($totals)
+    # Add updated totals row
+    $totals = $dt.NewRow()
+    if ($dt.Columns.Contains($colOrder)) { $totals.$colOrder="TOTAL" }
+    # Use SafeDecimal for totals
+    $totals.$colShippingPaid=($dt|ForEach-Object{SafeDecimal $_.$colShippingPaid}|Measure-Object -Sum).Sum
+    $totals.$colTotalShippingPaid=($dt|ForEach-Object{SafeDecimal $_.$colTotalShippingPaid}|Measure-Object -Sum).Sum
+    $totals.$colShippingCost=($dt|ForEach-Object{SafeDecimal $_.$colShippingCost}|Measure-Object -Sum).Sum
+    $totals.$colRefundAmount=($dt|ForEach-Object{SafeDecimal $_.$colRefundAmount}|Measure-Object -Sum).Sum
+    $dt.Rows.Add($totals)
         $grid.Refresh()
         $totRow=$grid.Rows.Count-1
         $grid.Rows[$totRow].Cells | ForEach-Object { if ($_ -and $_.Style) { $_.Style.Font=$boldFont } }
@@ -299,13 +322,39 @@ $btnCalc.Add_Click({
 # Save CSV button
 $btnSave.Add_Click({
     if ($grid.DataSource -is [System.Data.DataTable]) {
-        $sfd=New-Object Windows.Forms.SaveFileDialog; $sfd.Filter="CSV Files (*.csv)|*.csv"; $sfd.FileName="ShippingRefunds.csv"
+        $dt = $grid.DataSource
+        # Remove totals row before saving, store its values
+        $totalsRow = $null
+        foreach ($r in @($dt.Rows | Where-Object { $_.$colOrder -eq "TOTAL" })) {
+            $totalsRow = @{}
+            foreach ($col in $dt.Columns) { $totalsRow[$col.ColumnName] = $r[$col.ColumnName] }
+            $dt.Rows.Remove($r)
+        }
+
+    $sfd=New-Object Windows.Forms.SaveFileDialog; $sfd.Filter="CSV Files (*.csv)|*.csv"; $sfd.FileName="ShippingRefunds.csv"; $sfd.OverwritePrompt=$false
         if ($sfd.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
-            $grid.DataSource | Export-Csv -Path $sfd.FileName -NoTypeInformation -Encoding UTF8
-            [System.Windows.Forms.MessageBox]::Show("CSV saved successfully.","Saved",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
+            # Convert DataTable to array of custom objects for Export-Csv
+            $rows = @()
+            foreach ($row in $dt.Rows) {
+                $obj = New-Object PSObject
+                foreach ($col in $dt.Columns) {
+                    $obj | Add-Member -MemberType NoteProperty -Name $col.ColumnName -Value $row[$col]
+                }
+                $rows += $obj
+            }
+            $rows | Export-Csv -Path $sfd.FileName -NoTypeInformation -Encoding UTF8
+            # Silent save, no popup
+        }
+
+        # Restore totals row after saving
+        if ($totalsRow) {
+            $newRow = $dt.NewRow()
+            foreach ($col in $dt.Columns) { $newRow[$col.ColumnName] = $totalsRow[$col.ColumnName] }
+            $dt.Rows.Add($newRow)
+            $grid.Refresh()
         }
     } else {
-        [System.Windows.Forms.MessageBox]::Show("No data to save.","Error",[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Error)
+        # Silent fail, no popup
     }
 })
 
