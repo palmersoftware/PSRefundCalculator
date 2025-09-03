@@ -1,5 +1,6 @@
 ﻿# -------------------------------
-# Helper to safely parse cleaned currency strings to decimal
+# Safely parses a cleaned currency string to a decimal value.
+# Returns 0 if the value is empty or invalid.
 # -------------------------------
 function SafeDecimal($val) {
     $clean = CleanCurrency $val
@@ -7,7 +8,8 @@ function SafeDecimal($val) {
     [decimal]::Parse($clean)
 }
 # -------------------------------
-# Helper to clean currency strings
+# Cleans currency strings by removing all non-numeric characters except '.' and '-'.
+# This allows users to enter values like "$12.34" and still have them parsed correctly.
 # -------------------------------
 function CleanCurrency($val) {
     if ($null -eq $val) { return "0" }
@@ -23,12 +25,14 @@ function CleanCurrency($val) {
 # - Displays totals and formatting for easy review
 # =========================================
 
-Add-Type -AssemblyName System.Windows.Forms        # Load Windows Forms library for GUI
-Add-Type -AssemblyName System.Drawing             # Load Drawing library for colors and fonts
+# Load Windows Forms library for GUI controls
+Add-Type -AssemblyName System.Windows.Forms
+# Load Drawing library for colors and fonts
+Add-Type -AssemblyName System.Drawing
 
 # -------------------------------
-# Define CSV column headers as variables
-# Using variables allows future CSV renaming without breaking code
+# Define CSV column headers as variables.
+# If your CSV file uses different column names, update these variables to match.
 # -------------------------------
 $colOrder = "Order #"
 $colItemName = "Item Name"
@@ -43,6 +47,7 @@ $colRefundAmount = "Refund amount"
 # -------------------------------
 # Convert array of objects (CSV) to a DataTable
 # -------------------------------
+# Converts an array of PowerShell objects (from CSV) into a DataTable for use in the grid.
 function ConvertTo-DataTable {
     param([Parameter(Mandatory)][object[]]$Data)
     $dt = New-Object System.Data.DataTable    # Create empty DataTable
@@ -69,6 +74,7 @@ function ConvertTo-DataTable {
 # -------------------------------
 # Ensure required columns exist in DataTable
 # -------------------------------
+# Ensures all required columns exist in the DataTable, adding any that are missing.
 function Add-ColumnsIfMissing($dt, [string[]]$cols) {
     foreach ($col in $cols) {
         if (-not $dt.Columns.Contains($col)) {
@@ -80,6 +86,8 @@ function Add-ColumnsIfMissing($dt, [string[]]$cols) {
 # -------------------------------
 # Remove empty rows or rows without a recipient
 # -------------------------------
+# Removes rows that are empty or missing a recipient.
+# This keeps the data clean and prevents calculation errors.
 function Remove-EmptyRows($dt) {
     foreach ($row in @($dt.Rows)) {    # Loop through a copy to avoid modifying collection during iteration
         $isEmpty = $null -eq ($row.ItemArray | ForEach-Object { ($_ -as [string]).Trim() } | Where-Object { $_ })
@@ -92,15 +100,16 @@ function Remove-EmptyRows($dt) {
 # -------------------------------
 # Recalculate Shipping and Refunds
 # -------------------------------
+# Calculates shipping totals and refund amounts for each recipient.
+# Only the first row per recipient shows totals; others are left blank for clarity.
 function Update-Refunds($dt) {
     Add-ColumnsIfMissing $dt $colShippingPaid,$colShippingCost,$colTotalShippingPaid,$colRefundAmount  # Ensure all needed columns exist
     Remove-EmptyRows $dt   # Remove empty rows
 
-    # Move Total Shipping Paid column immediately after Shipping Paid
+    # Move Total Shipping Paid column immediately after Shipping Paid for better readability
     $dt.Columns[$colTotalShippingPaid].SetOrdinal($dt.Columns[$colShippingPaid].Ordinal + 1)
 
-
-    # Group rows by recipient
+    # Group rows by recipient so we can sum shipping paid/cost for each customer
     foreach ($group in ($dt | Group-Object $colRecipient)) {
         $totalPaid = 0; $totalCost = 0
 
@@ -113,12 +122,12 @@ function Update-Refunds($dt) {
         $first=$true
         foreach ($r in $group.Group) {
             if ($first) {
-                # Only first row per recipient gets totals
+                # Only first row per recipient gets totals and refund
                 $r.$colTotalShippingPaid = if ($totalPaid -ne 0){$totalPaid}else{""}
                 $r.$colRefundAmount = if ($totalPaid -ne 0 -or $totalCost -ne 0){$totalPaid - $totalCost}else{""}
                 $first=$false
             } else {
-                # Other rows empty
+                # Other rows for this recipient are left blank for totals/refund
                 $r.$colTotalShippingPaid = ""; $r.$colRefundAmount = ""
             }
         }
