@@ -62,7 +62,7 @@ Your CSV file should have the following columns, and the script variables must r
 
 - If you see "Working On It..." when loading files, try running the app in a regular PowerShell window (not inside VS Code).
 - Dollar signs and other symbols in shipping fields are OK—the app will ignore them for calculations.
-- If you have questions or need help, contact your support team or developer.
+- If you have questions or need help, contact https://github.com/palmersoftware/PSRefundCalculator
 
 ---
 
