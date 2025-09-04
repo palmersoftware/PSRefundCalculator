@@ -58,6 +58,14 @@ Your CSV file should have the following columns, and the script variables must r
 
 ---
 
+## Application Layout Notes
+
+- The app's layout logic has been simplified to avoid duplicate control additions and repeated panel positioning.
+- If you customize the UI, ensure each control is only added once and positioned as needed.
+- The top panel and grid are added to the form a single time, and their positions are set for clarity and maintainability.
+
+---
+
 ## Tips
 
 - If you see "Working On It..." when loading files, try running the app in a regular PowerShell window (not inside VS Code).

@@ -179,3 +179,9 @@ For questions or improvements, contact the project owner or submit issues via th
 ---
 
 *This guide is intended for developers maintaining or extending the Shipping Refund Calculator. If you are new to PowerShell or Windows Forms, read each function and comment carefully, and test changes in a safe environment before deploying.*
+
+## Redundancy Cleanup & Layout Logic
+
+- The script now avoids duplicate UI control additions and repeated panel positioning.
+- Controls are only added to the form once, and layout logic is set in a single place for maintainability.
+- If you extend or customize the UI, always check for duplicate additions or unnecessary repeated code.
