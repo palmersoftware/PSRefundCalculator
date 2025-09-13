@@ -1,3 +1,4 @@
+
 # NWE Shipping Refund Calculator - Developer Guide
 
 This guide provides a comprehensive technical overview of the PowerShell GUI application, including code structure, logic, and maintenance tips. It is written for junior developers and explains every major part of the code and why it exists.
