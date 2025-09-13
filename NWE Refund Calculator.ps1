@@ -27,6 +27,8 @@ Modern UI, robust error handling, and export features
 #>
 
 $grid = New-Object Windows.Forms.DataGridView # create main grid
+$gridStats = New-Object Windows.Forms.DataGridView # create stats grid
+$gridStats.Dock = 'Fill' # ensure it fills the tab
 <#
 Input: Array of PowerShell objects (from CSV)
 Output: DataTable for use in grid
@@ -64,19 +66,9 @@ function CleanCurrency($val) {
     if ($null -eq $val) { return "0" } # treat null as zero
     return ($val -replace '[^0-9.-]', '') # remove non-numeric chars
 }
-# =========================================
-# NWE Shipping Calculator - PowerShell GUI
-# =========================================
-# This application:
-# - Loads CSV orders
-# - Calculates shipping totals, refund amounts per recipient
-# - Highlights missing values or issues
-# - Displays totals and formatting for easy review
-# =========================================
-
-# Load Windows Forms library for GUI controls
+############################################################
+# Load Windows Forms and Drawing libraries for GUI controls and colors/fonts
 Add-Type -AssemblyName System.Windows.Forms
-# Load Drawing library for colors and fonts
 Add-Type -AssemblyName System.Drawing
 
 ############################################################
@@ -92,6 +84,16 @@ $colShippingPaid = "Shipping Paid"
 $colTotalShippingPaid = "Total Shipping Paid"
 $colShippingCost = "Shipping Cost"
 $colRefundAmount = "Refund amount"
+
+# =========================================
+# NWE Shipping Calculator - PowerShell GUI
+# =========================================
+# This application:
+# - Loads CSV orders
+# - Calculates shipping totals, refund amounts per recipient
+# - Highlights missing values or issues
+# - Displays totals and formatting for easy review
+# =========================================
 
 # -------------------------------
 # Convert array of objects (CSV) to a DataTable
@@ -289,6 +291,9 @@ $btnLoad.Cursor = [System.Windows.Forms.Cursors]::Hand # set cursor
 $btnCalc.Enabled = $false # disable button
 $btnExportPurchases.Enabled = $false # disable button
 $btnExportStats.Enabled = $false # disable button
+$btnCalc.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#d3d3d3') # gray when disabled
+$btnExportPurchases.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#d3d3d3')
+$btnExportStats.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#d3d3d3')
 
 # -------------------------------
 ############################################################
@@ -476,8 +481,6 @@ All UI and stats updates are handled here for consistency.
 function Load-Purchases {
     # Prepare UI and button states for loading purchases
     $btnLoad.FlatAppearance.BorderSize = 0
-    Set-ButtonColors -active $true
-    Set-ButtonCursors -active $true
     $tempData = $null
     # Store current grid data for restoration if needed
     if ($grid.DataSource -is [System.Data.DataTable] -and $grid.Rows.Count -gt 0) {
@@ -511,11 +514,15 @@ function Load-Purchases {
         Add-TotalsRowAndFormat $grid $dtSorted $boldFont
     if (-not $tabStats.Controls.Contains($gridStats)) {
         $tabStats.Controls.Add($gridStats) # add stats grid to tab only after loading
+        $gridStats.Dock = 'Fill' # ensure it fills the tab after adding
     }
     Show-Stats $dtSorted # Ensure Stats tab gridview is shown after loading data
     $btnCalc.Enabled = $true
     $btnExportPurchases.Enabled = $true
     $btnExportStats.Enabled = $true
+    $btnCalc.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#2563eb') # blue when enabled
+$btnExportPurchases.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#2563eb')
+$btnExportStats.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#2563eb')
     } else {
         # Restore previous grid data if cancelled
         if ($tempData) {
@@ -815,7 +822,6 @@ $btnCalc.Add_Click({
     if ($grid.DataSource -is [System.Data.DataTable]) {
         $dt = $grid.DataSource
         Show-CustomerStats $dt
-        Show-PurchaseStats $dt
     }
 })
 
@@ -824,7 +830,6 @@ $btnLoad.Add_Click({
     if ($grid.DataSource -is [System.Data.DataTable]) {
         $dt = $grid.DataSource
         Show-CustomerStats $dt
-        Show-PurchaseStats $dt
     }
 })
 
